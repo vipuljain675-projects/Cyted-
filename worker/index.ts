@@ -108,8 +108,25 @@ const worker = new Worker(
   }
 );
 
-worker.on('failed', (job, err) => {
+worker.on('failed', async (job, err) => {
   console.error(`[Worker] ❌ Job ${job?.id} failed:`, err.message);
+  if (job?.data?.runId) {
+    try {
+      const updatedRun = await db.run.update({
+        where: { id: job.data.runId },
+        data: { completedJobs: { increment: 1 } },
+      });
+      if (updatedRun.completedJobs >= updatedRun.totalJobs) {
+        await db.run.update({
+          where: { id: job.data.runId },
+          data: { status: 'completed' },
+        });
+        console.log(`[Worker] ✅ Run ${job.data.runId} marked completed after failure`);
+      }
+    } catch (e) {
+      console.error('[Worker DB Update Error]', e);
+    }
+  }
 });
 
 worker.on('error', (err) => {

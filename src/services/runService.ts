@@ -8,6 +8,7 @@
 import { db } from '@/lib/db';
 import { callLLM, TEST_PROVIDERS } from '@/lib/llm';
 import { analyzerService } from '@/services/analyzerService';
+import { addPromptJobsToQueue } from '@/lib/queue';
 
 // Helper: sleep to avoid rate-limiting
 function sleep(ms: number) {
@@ -167,10 +168,15 @@ export const runService = {
 
     console.log(`[RunService] Created run ${run.id} | ${totalJobs} total jobs`);
 
-    // 4. Run in background (fire-and-forget — API returns immediately)
-    executeRunDirectly(run.id, brandId, prompts).catch((e) =>
-      console.error('[RunService Background Error]', e)
-    );
+    // 4. Enqueue into BullMQ (Redis) or fallback to direct execution
+    const enqueued = await addPromptJobsToQueue(run.id, brandId, prompts);
+
+    if (!enqueued) {
+      console.log(`[RunService] Running ${run.id} directly in-process (fallback)`);
+      executeRunDirectly(run.id, brandId, prompts).catch((e) =>
+        console.error('[RunService Background Error]', e)
+      );
+    }
 
     return { runId: run.id, totalJobs };
   },
