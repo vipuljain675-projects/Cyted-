@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  company   String?
+  brands    Brand[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Brand {
+  id          String       @id @default(cuid())
+  name        String
+  category    String
+  website     String?
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competitors Competitor[]
+  prompts     Prompt[]
+  runs        Run[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Competitor {
+  id        String   @id @default(cuid())
+  name      String
+  brandId   String
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Prompt {
+  id        String     @id @default(cuid())
+  text      String
+  type      String     // "discovery" | "comparison" | "alternative" | "problem"
+  brandId   String
+  brand     Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  responses Response[]
+  createdAt DateTime   @default(now())
+}
+
+model Run {
+  id            String     @id @default(cuid())
+  brandId       String
+  brand         Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  status        String     @default("pending") // "pending" | "running" | "completed" | "failed"
+  totalJobs     Int        @default(0)
+  completedJobs Int        @default(0)
+  responses     Response[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Response {
+  id        String    @id @default(cuid())
+  runId     String
+  run       Run       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  promptId  String
+  prompt    Prompt    @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  model     String    // "groq-llama3" | "gemini-flash" | "openrouter-free"
+  rawText   String
+  mentions  Mention[]
+  createdAt DateTime  @default(now())
+}
+
+model Mention {
+  id             String   @id @default(cuid())
+  responseId     String
+  response       Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  brandName      String
+  isTrackedBrand Boolean  @default(false)
+  position       Int?     // rank in recommendation list (1, 2, 3...)
+  sentiment      String   @default("neutral") // "positive" | "neutral" | "negative"
+  contextSnippet String?
+  createdAt      DateTime @default(now())
+}
