@@ -8,7 +8,9 @@
 import { db } from '@/lib/db';
 import { callLLM, TEST_PROVIDERS } from '@/lib/llm';
 import { analyzerService } from '@/services/analyzerService';
-import { addPromptJobsToQueue } from '@/lib/queue';
+// NOTE: queue.ts is dynamically imported inside startRun() to avoid loading
+// ioredis/BullMQ on every API request. Redis connection only happens when
+// someone actually clicks "Run Audit".
 
 // Helper: sleep to avoid rate-limiting
 function sleep(ms: number) {
@@ -168,8 +170,14 @@ export const runService = {
 
     console.log(`[RunService] Created run ${run.id} | ${totalJobs} total jobs`);
 
-    // 4. Enqueue into BullMQ (Redis) or fallback to direct execution
-    const enqueued = await addPromptJobsToQueue(run.id, brandId, prompts);
+    // 4. Dynamically import queue module (lazy-loads Redis/BullMQ only when needed)
+    let enqueued = false;
+    try {
+      const { addPromptJobsToQueue } = await import('@/lib/queue');
+      enqueued = await addPromptJobsToQueue(run.id, brandId, prompts);
+    } catch (queueErr) {
+      console.warn('[RunService] Queue import/enqueue failed, using direct runner:', queueErr);
+    }
 
     if (!enqueued) {
       console.log(`[RunService] Running ${run.id} directly in-process (fallback)`);
